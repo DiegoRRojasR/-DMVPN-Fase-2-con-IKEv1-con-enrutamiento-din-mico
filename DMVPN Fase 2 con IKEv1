@@ -1,0 +1,301 @@
+Configuración de PCs
+
+PC-HUB
+ip 10.9.20.10/24 10.9.20.1
+PC1
+ip 10.9.28.10/24 10.9.28.1
+PC2
+ip 10.9.29.10/24 10.9.29.1
+
+----------------------------------------------------------
+
+Configuración del ISP
+
+enable
+conf t
+hostname ISP
+no ip domain-lookup
+
+interface g0/0
+ ip address 172.16.9.10 255.255.255.252
+ no shutdown
+
+interface g0/1
+ ip address 172.16.9.14 255.255.255.252
+ no shutdown
+
+interface g0/2
+ ip address 172.16.9.18 255.255.255.252
+ no shutdown
+
+end
+wr mem
+
+----------------------------------------------------------
+
+Configuración base del HUB
+
+enable
+conf t
+hostname HUB
+no ip domain-lookup
+
+interface g0/0
+ ip address 172.16.9.9 255.255.255.252
+ no shutdown
+
+interface g0/1
+ ip address 10.9.20.1 255.255.255.0
+ no shutdown
+
+ip route 0.0.0.0 0.0.0.0 172.16.9.10
+
+end
+wr mem
+
+----------------------------------------------------------
+
+Configuración base de SPOKE1
+
+enable
+conf t
+hostname SPOKE1
+no ip domain-lookup
+
+interface g0/0
+ ip address 172.16.9.13 255.255.255.252
+ no shutdown
+
+interface g0/1
+ ip address 10.9.28.1 255.255.255.0
+ no shutdown
+
+ip route 0.0.0.0 0.0.0.0 172.16.9.14
+
+end
+wr mem
+
+----------------------------------------------------------
+
+Configuración base de SPOKE2
+
+enable
+conf t
+hostname SPOKE2
+no ip domain-lookup
+
+interface g0/0
+ ip address 172.16.9.17 255.255.255.252
+ no shutdown
+
+interface g0/1
+ ip address 10.9.29.1 255.255.255.0
+ no shutdown
+
+ip route 0.0.0.0 0.0.0.0 172.16.9.18
+
+end
+wr mem
+
+----------------------------------------------------------
+
+Verificación previa obligatoria
+
+Antes de DMVPN, prueba conectividad WAN.
+
+Desde HUB
+
+ping 172.16.9.13
+ping 172.16.9.17
+
+Desde SPOKE1
+
+ping 172.16.9.9
+
+Desde SPOKE2
+
+ping 172.16.9.9
+
+----------------------------------------------------------
+
+DMVPN Fase 2 con IKEv1 — HUB
+
+conf t
+
+crypto isakmp policy 10
+ encr aes 256
+ hash sha
+ authentication pre-share
+ group 14
+ lifetime 86400
+
+crypto isakmp key C1sco-0918 address 0.0.0.0 0.0.0.0
+
+crypto ipsec transform-set TS-DMVPN esp-aes 256 esp-sha-hmac
+ mode transport
+
+crypto ipsec profile DMVPN-PROF
+ set transform-set TS-DMVPN
+
+interface Tunnel100
+ ip address 10.200.9.1 255.255.255.0
+ no ip redirects
+ ip nhrp authentication NHRP0918
+ ip nhrp network-id 100
+ tunnel source g0/0
+ tunnel mode gre multipoint
+ tunnel key 100
+ tunnel protection ipsec profile DMVPN-PROF
+
+router eigrp 100
+ network 10.200.9.0 0.0.0.255
+ network 10.9.20.0 0.0.0.255
+ no auto-summary
+
+end
+
+conf t
+interface Tunnel100
+ no ip split-horizon eigrp 100
+ no ip next-hop-self eigrp 100
+end
+
+wr mem
+
+----------------------------------------------------------
+
+DMVPN Fase 2 con IKEv1 — SPOKE1
+
+conf t
+
+crypto isakmp policy 10
+ encr aes 256
+ hash sha
+ authentication pre-share
+ group 14
+ lifetime 86400
+
+crypto isakmp key C1sco-0918 address 172.16.9.9
+
+crypto ipsec transform-set TS-DMVPN esp-aes 256 esp-sha-hmac
+ mode transport
+
+crypto ipsec profile DMVPN-PROF
+ set transform-set TS-DMVPN
+
+interface Tunnel100
+ ip address 10.200.9.11 255.255.255.0
+ no ip redirects
+ ip nhrp authentication NHRP0918
+ ip nhrp network-id 100
+ ip nhrp nhs 10.200.9.1
+ ip nhrp map 10.200.9.1 172.16.9.9
+ ip nhrp map multicast 172.16.9.9
+ tunnel source g0/0
+ tunnel mode gre multipoint
+ tunnel key 100
+ tunnel protection ipsec profile DMVPN-PROF
+
+router eigrp 100
+ network 10.200.9.0 0.0.0.255
+ network 10.9.28.0 0.0.0.255
+ no auto-summary
+
+end
+wr mem
+
+----------------------------------------------------------
+
+DMVPN Fase 2 con IKEv1 — SPOKE2
+
+conf t
+
+crypto isakmp policy 10
+ encr aes 256
+ hash sha
+ authentication pre-share
+ group 14
+ lifetime 86400
+
+crypto isakmp key C1sco-0918 address 172.16.9.9
+
+crypto ipsec transform-set TS-DMVPN esp-aes 256 esp-sha-hmac
+ mode transport
+
+crypto ipsec profile DMVPN-PROF
+ set transform-set TS-DMVPN
+
+interface Tunnel100
+ ip address 10.200.9.12 255.255.255.0
+ no ip redirects
+ ip nhrp authentication NHRP0918
+ ip nhrp network-id 100
+ ip nhrp nhs 10.200.9.1
+ ip nhrp map 10.200.9.1 172.16.9.9
+ ip nhrp map multicast 172.16.9.9
+ tunnel source g0/0
+ tunnel mode gre multipoint
+ tunnel key 100
+ tunnel protection ipsec profile DMVPN-PROF
+
+router eigrp 100
+ network 10.200.9.0 0.0.0.255
+ network 10.9.29.0 0.0.0.255
+ no auto-summary
+
+end
+wr mem
+
+----------------------------------------------------------
+
+Verificación de DMVPN Fase 2
+
+En el HUB
+
+show dmvpn
+show ip nhrp
+show crypto isakmp sa
+show crypto ipsec sa
+show ip eigrp neighbors
+show ip route
+
+
+En SPOKE1 y SPOKE2
+
+show dmvpn
+show ip nhrp
+show crypto isakmp sa
+show crypto ipsec sa
+show ip eigrp neighbors
+show ip route
+
+----------------------------------------------------------
+
+Comprobaciones finales
+
+En HUB
+
+show dmvpn
+show ip nhrp
+show crypto isakmp sa
+show crypto ipsec sa
+show ip eigrp neighbors
+show ip route
+
+En SPOKE1 o SPOKE2
+
+show dmvpn
+show ip route
+show ip eigrp neighbors
+
+En PCs
+
+PC1
+
+ping 10.9.20.10
+ping 10.9.29.10
+
+PC2
+
+ping 10.9.28.10
+ping 10.9.20.10
